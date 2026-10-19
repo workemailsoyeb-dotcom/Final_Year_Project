@@ -1,0 +1,248 @@
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    overflow-x: hidden;
+}
+
+body {
+    font-family: sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f4d6c9;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    flex: 1;
+    width: 100%;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 24px;
+    min-width: 0;
+}
+
+h1 {
+    color: #333;
+    font-size: 2.8em;
+    text-align: center;
+    margin: 0 0 8px;
+}
+
+.title-subtext {
+    margin: 0 0 24px;
+    font-size: 1.1em;
+    text-align: center;
+    color: #333;
+}
+
+.equation-card,
+.form-card {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    /* stronger rose-gold shade with subtle warm border */
+    box-shadow: 0 12px 36px rgba(183,110,121,0.18), 0 4px 12px rgba(183,110,121,0.08);
+    border: 1px solid rgba(183,110,121,0.12);
+    background-image: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.995));
+    margin-bottom: 20px;
+    min-width: 0;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.equation-card:hover,
+.form-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 18px 48px rgba(183,110,121,0.22), 0 6px 18px rgba(183,110,121,0.12);
+}
+
+.container > .equation-card,
+.container > .form-card {
+    width: 100%;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.equation-title {
+    margin: 0 0 12px;
+    font-size: 1.1em;
+    color: #333;
+}
+
+.equation {
+    font-size: clamp(1.1rem, 4.2vw, 1.6rem);
+    text-align: center;
+    margin: 0;
+    color: #222;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.equation-details {
+    margin-top: 14px;
+    color: #444;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+form {
+    margin: 0;
+}
+
+.field-group {
+    margin-bottom: 14px;
+    min-width: 0;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #333;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+    min-width: 0;
+}
+
+.coeff-title {
+    margin: 14px 0 10px;
+    color: #333;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
+}
+
+.form-actions {
+    margin-top: 18px;
+}
+
+.submit-button {
+    background: #007bff;
+    color: white;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: bold;
+}
+
+.output-title {
+    margin: 0 0 10px;
+    color: #333;
+}
+
+.result-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.result-grid > section {
+    min-width: 0;
+}
+
+.result-full {
+    grid-column: 1 / -1;
+}
+
+.output-box {
+    background: #333;
+    color: #eee;
+    padding: 15px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    margin: 0 0 12px;
+    max-width: 100%;
+}
+
+.plot-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+    background: #fff;
+    max-width: 100%;
+}
+
+.status-text {
+    margin-top: 10px;
+    color: #555;
+    font-size: 0.95em;
+}
+
+.credits-button {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    color: #007bff;
+    cursor: pointer;
+    text-decoration: underline;
+    font-weight: bold;
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.footer {
+    text-align: center;
+    color: #777;
+    padding: 10px 0 20px;
+}
+
+@media (max-width: 700px) {
+    .container {
+        padding: 16px;
+    }
+
+    .equation-card,
+    .form-card {
+        padding: 16px;
+    }
+
+    .grid,
+    .result-grid {
+        grid-template-columns: 1fr;
+    }
+
+    h1 {
+        font-size: 2.05em;
+    }
+
+    .title-subtext {
+        font-size: 1em;
+    }
+
+    .equation {
+        font-size: 1.12rem;
+    }
+
+    .submit-button {
+        width: 100%;
+    }
+
+    .credits-button {
+        right: 12px;
+        bottom: 12px;
+    }
+}

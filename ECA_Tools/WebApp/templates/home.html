@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Elliptic Curve Arithmetic Tools</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('template_styles', filename='home.css') }}">
+    <script>
+        var activeRequestController = null;
+        var activeRequestSerial = 0;
+
+        function getClientId() {
+            var key = 'eca_webapp_client_id';
+            var existing = window.localStorage.getItem(key);
+            if (existing) {
+                return existing;
+            }
+
+            var generated = 'client-' + Date.now() + '-' + Math.random().toString(16).slice(2, 10);
+            window.localStorage.setItem(key, generated);
+            return generated;
+        }
+
+        function isPointAction(action) {
+            return action === '/point_add' || action === '/point_multiply' || action === '/point_divide' || action === '/point_substract';
+        }
+
+        function supportsPlot(action) {
+            return action === '/calculate' || action === '/list_points';
+        }
+
+        function setSectionState(sectionId, enabled) {
+            var section = document.getElementById(sectionId);
+            if (!section) {
+                return;
+            }
+
+            section.style.display = enabled ? 'block' : 'none';
+            section.querySelectorAll('input, select, textarea').forEach(function (control) {
+                control.disabled = !enabled;
+                if (!enabled) {
+                    control.required = false;
+                }
+            });
+        }
+
+        function updateFormVisibility() {
+            var choice = document.getElementById('Choice_of_Coeff').value;
+            var action = document.getElementById('Action_Type').value;
+            var coeffInputs = document.getElementById('coeff_inputs');
+            var pointInputs = document.getElementById('point_inputs');
+            var scalarInput = document.getElementById('scalar_input');
+            var point2Inputs = document.getElementById('point2_inputs');
+            var plotGroup = document.getElementById('plot_input_group');
+            var plotSelect = document.getElementById('Plot_Points');
+            var curveSelect = document.getElementById('Plot_Curve');
+            var curveGroup = document.getElementById('plot_curve_group');
+            var plotRule = document.getElementById('plot_points_rule');
+
+            setSectionState('coeff_inputs', choice === '0');
+
+            var showPointInputs = (choice === '0') && isPointAction(action);
+            setSectionState('point_inputs', showPointInputs);
+            setSectionState('scalar_input', showPointInputs && (action === '/point_multiply' || action === '/point_divide'));
+
+            if (point2Inputs) {
+                var showPoint2 = showPointInputs && action !== '/point_multiply' && action !== '/point_divide';
+                point2Inputs.style.display = showPoint2 ? 'contents' : 'none';
+                point2Inputs.querySelectorAll('input, select, textarea').forEach(function (control) {
+                    control.disabled = !showPoint2;
+                });
+            }
+
+            if (!supportsPlot(action)) {
+                plotSelect.value = '2';
+                plotSelect.disabled = true;
+                curveSelect.value = '2';
+                curveSelect.disabled = true;
+                plotRule.style.display = 'none';
+                plotGroup.style.display = 'none';
+                if (curveGroup) {
+                    curveGroup.style.display = 'none';
+                }
+                return;
+            }
+
+            plotGroup.style.display = 'block';
+            if (curveGroup) {
+                curveGroup.style.display = 'block';
+            }
+
+            var degreeInput = document.getElementById('Degree');
+            var degreeVal = parseInt(degreeInput.value, 10);
+
+            if (!isNaN(degreeVal) && degreeVal > 1) {
+                plotSelect.value = '2';
+                plotSelect.disabled = true;
+                curveSelect.value = '2';
+                curveSelect.disabled = true;
+                plotRule.style.display = 'inline';
+            } else {
+                plotSelect.disabled = false;
+                curveSelect.disabled = false;
+                plotRule.style.display = 'none';
+            }
+        }
+
+        function updatePlotAvailability() {
+            updateFormVisibility();
+        }
+
+        function syncChoiceWithAction() {
+            updateFormVisibility();
+        }
+
+        function updateFormAction() {
+            var actionSelect = document.getElementById('Action_Type');
+            var toolForm = document.getElementById('unified_tool_form');
+            toolForm.action = actionSelect.value;
+            syncChoiceWithAction();
+        }
+
+        function initializeUnifiedForm() {
+            updateFormVisibility();
+            updateFormAction();
+        }
+
+        async function submitUnifiedForm(event) {
+            event.preventDefault();
+
+            var form = document.getElementById('unified_tool_form');
+            var submitBtn = document.getElementById('submit_btn');
+            var statusText = document.getElementById('status_text');
+            var resultCard = document.getElementById('result_card');
+            var outputBox = document.getElementById('output_box');
+            var errorBox = document.getElementById('error_box');
+            var pointsCard = document.getElementById('plot_points_card');
+            var pointsImage = document.getElementById('plot_points_image');
+            var pointsErrorBox = document.getElementById('plot_points_error_box');
+            var curveCard = document.getElementById('plot_curve_card');
+            var curveImage = document.getElementById('plot_curve_image');
+            var curveErrorBox = document.getElementById('plot_curve_error_box');
+            var action = document.getElementById('Action_Type').value;
+            var plotPointsEnabled = supportsPlot(action) && document.getElementById('Plot_Points').value === '1';
+            var plotCurveEnabled = supportsPlot(action) && document.getElementById('Plot_Curve').value === '1';
+            var clientId = getClientId();
+            var requestSerial = activeRequestSerial + 1;
+            activeRequestSerial = requestSerial;
+
+            if (activeRequestController) {
+                activeRequestController.abort();
+            }
+            activeRequestController = new AbortController();
+
+            function syncResultCardWidth() {
+                if (pointsCard.style.display === 'none' && curveCard.style.display === 'none') {
+                    resultCard.classList.add('result-full');
+                } else {
+                    resultCard.classList.remove('result-full');
+                }
+            }
+
+            statusText.textContent = 'Running calculation...';
+
+            pointsCard.style.display = 'none';
+            pointsImage.style.display = 'none';
+            pointsImage.removeAttribute('src');
+            pointsErrorBox.style.display = 'none';
+            pointsErrorBox.textContent = '';
+
+            curveCard.style.display = 'none';
+            curveImage.style.display = 'none';
+            curveImage.removeAttribute('src');
+            curveErrorBox.style.display = 'none';
+            curveErrorBox.textContent = '';
+            syncResultCardWidth();
+
+            try {
+                var response = await fetch(form.action, {
+                    method: 'POST',
+                    body: new FormData(form),
+                    signal: activeRequestController.signal,
+                    headers: {
+                        'X-Client-Id': clientId
+                    }
+                });
+
+                var html = await response.text();
+                if (requestSerial !== activeRequestSerial) {
+                    return false;
+                }
+                var parser = new DOMParser();
+                var doc = parser.parseFromString(html, 'text/html');
+
+                var extractedOutput = '';
+                var extractedError = '';
+                var extractedPlotPoints = '';
+                var extractedPlotPointsError = '';
+                var extractedPlotCurve = '';
+                var extractedPlotCurveError = '';
+                var headings = doc.querySelectorAll('h3');
+
+                headings.forEach(function (h3) {
+                    var title = (h3.textContent || '').trim().toLowerCase();
+                    var next = h3.nextElementSibling;
+                    if (!next || next.tagName !== 'PRE') {
+                        return;
+                    }
+                    if (title === 'output:') {
+                        extractedOutput = next.textContent || '';
+                    }
+                    if (title === 'error:') {
+                        extractedError = next.textContent || '';
+                    }
+                    if (title === 'plot points:') {
+                        extractedPlotPoints = next.textContent || '';
+                    }
+                    if (title === 'plot points error:') {
+                        extractedPlotPointsError = next.textContent || '';
+                    }
+                    if (title === 'plot curve:') {
+                        extractedPlotCurve = next.textContent || '';
+                    }
+                    if (title === 'plot curve error:') {
+                        extractedPlotCurveError = next.textContent || '';
+                    }
+                });
+
+                outputBox.style.display = extractedOutput ? 'block' : 'none';
+                errorBox.style.display = extractedError ? 'block' : 'none';
+                outputBox.textContent = extractedOutput;
+                errorBox.textContent = extractedError;
+                var hasResult = !!(extractedOutput || extractedError);
+
+                // Default hidden; reveal after sync logic so cards can appear together.
+                resultCard.style.display = 'none';
+                pointsCard.style.display = 'none';
+                curveCard.style.display = 'none';
+
+                if (plotPointsEnabled) {
+                    if (extractedPlotPoints) {
+                        pointsImage.src = 'data:image/png;base64,' + extractedPlotPoints;
+                        pointsImage.style.display = 'block';
+                        pointsErrorBox.style.display = 'none';
+                        pointsErrorBox.textContent = '';
+                        pointsCard.style.display = 'block';
+                    } else if (extractedPlotPointsError) {
+                        pointsImage.style.display = 'none';
+                        pointsErrorBox.style.display = 'block';
+                        pointsErrorBox.textContent = extractedPlotPointsError;
+                        pointsCard.style.display = 'block';
+                    }
+                }
+
+                if (plotCurveEnabled) {
+                    if (extractedPlotCurve) {
+                        curveImage.src = 'data:image/png;base64,' + extractedPlotCurve;
+                        curveImage.style.display = 'block';
+                        curveErrorBox.style.display = 'none';
+                        curveErrorBox.textContent = '';
+                        curveCard.style.display = 'block';
+                    } else if (extractedPlotCurveError) {
+                        curveImage.style.display = 'none';
+                        curveErrorBox.style.display = 'block';
+                        curveErrorBox.textContent = extractedPlotCurveError;
+                        curveCard.style.display = 'block';
+                    }
+                }
+
+                if (requestSerial === activeRequestSerial) {
+                    resultCard.style.display = hasResult ? 'block' : 'none';
+                    syncResultCardWidth();
+                    statusText.textContent = 'Completed.';
+                }
+            } catch (err) {
+                if (requestSerial !== activeRequestSerial) {
+                    return false;
+                }
+
+                if (err && err.name === 'AbortError') {
+                    statusText.textContent = 'Previous request cancelled. Running latest calculation...';
+                    return false;
+                }
+
+                outputBox.style.display = 'none';
+                errorBox.style.display = 'block';
+                errorBox.textContent = 'Request failed: ' + err;
+                resultCard.style.display = 'block';
+
+                pointsImage.removeAttribute('src');
+                pointsImage.style.display = 'none';
+                if (plotPointsEnabled) {
+                    pointsErrorBox.style.display = 'block';
+                    pointsErrorBox.textContent = 'Points plot request failed.';
+                    pointsCard.style.display = 'block';
+                } else {
+                    pointsErrorBox.style.display = 'none';
+                    pointsErrorBox.textContent = '';
+                    pointsCard.style.display = 'none';
+                }
+
+                curveImage.removeAttribute('src');
+                curveImage.style.display = 'none';
+                if (plotCurveEnabled) {
+                    curveErrorBox.style.display = 'block';
+                    curveErrorBox.textContent = 'Curve plot request failed.';
+                    curveCard.style.display = 'block';
+                } else {
+                    curveErrorBox.style.display = 'none';
+                    curveErrorBox.textContent = '';
+                    curveCard.style.display = 'none';
+                }
+                syncResultCardWidth();
+                statusText.textContent = 'Failed.';
+            } finally {
+                if (requestSerial === activeRequestSerial) {
+                    activeRequestController = null;
+                    submitBtn.textContent = 'Calculate';
+                }
+            }
+
+            return false;
+        }
+    </script>
+</head>
+<body onload="initializeUnifiedForm()">
+    <div class="container">
+        <h1>Elliptic Curve Arithmetic Tools</h1>
+        <p class="title-subtext">(using SageMath)</p>
+
+        <section class="equation-card">
+            <h2 class="equation-title">Elliptic Curve Equation used by the tools</h2>
+            <p class="equation">y² + a₁xy + a₃y = x³ + a₂x² + a₄x + a₆</p>
+            <p class="equation-subtext">Defined over GF(pⁿ)</p>
+            <div class="equation-details">
+                <div><strong>Variable Description:</strong></div>
+                <div><strong>p</strong>: Prime defining the base finite field GF(p).</div>
+                <div><strong>n</strong>: Extension degree, so computation is over GF(pⁿ).</div>
+                <div><strong>a₁, a₂, a₃, a₄, a₆</strong>: Elliptic curve coefficients.</div>
+                <div><strong>x, y</strong>: Coordinates of points on the curve.</div>   
+            </div>
+        </section>
+
+        <section class="form-card">
+            <form id="unified_tool_form" method="post" onsubmit="return submitUnifiedForm(event)">
+                <div class="grid">
+                    <div class="field-group">
+                        <label for="Base_Field">Base Field (p):</label>
+                        <input type="text" id="Base_Field" name="Base_Field" required>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="Degree">Degree (n):</label>
+                        <input type="number" id="Degree" name="Degree" value="1" oninput="updatePlotAvailability()" required>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="Choice_of_Coeff">Choice of Coeff:</label>
+                        <select id="Choice_of_Coeff" name="Choice_of_Coeff" onchange="updateFormVisibility()">
+                            <option value="0" selected>0: Manual</option>
+                            <option value="1">1: Random</option>
+                        </select>
+                    </div>
+
+                    <div id="plot_input_group" class="field-group">
+                        <label for="Plot_Points">Plot Points ?<span id="plot_points_rule" style="display:none; font-weight:normal; color:#555;">(disabled when degree > 1)</span></label>
+                        <select id="Plot_Points" name="Plot_Points">
+                            <option value="1" selected>1. Yes</option>
+                            <option value="2">2. No</option>
+                        </select>
+                    </div>
+
+                    <div id="plot_curve_group" class="field-group">
+                        <label for="Plot_Curve">Plot the Curve</label>
+                        <select id="Plot_Curve" name="Plot_Curve">
+                            <option value="1" selected>1. Yes</option>
+                            <option value="2">2. No</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="coeff_inputs">
+                    <p class="coeff-title"><strong>Enter Coefficients (shown for Choice = 0):</strong></p>
+                    <div class="grid">
+                        <div class="field-group">
+                            <label for="Coeff_a1">Coeff (a1):</label>
+                            <input type="text" id="Coeff_a1" name="Coeff_a1" value="0">
+                        </div>
+                        <div class="field-group">
+                            <label for="Coeff_a2">Coeff (a2):</label>
+                            <input type="text" id="Coeff_a2" name="Coeff_a2" value="0">
+                        </div>
+                        <div class="field-group">
+                            <label for="Coeff_a3">Coeff (a3):</label>
+                            <input type="text" id="Coeff_a3" name="Coeff_a3" value="0">
+                        </div>
+                        <div class="field-group">
+                            <label for="Coeff_a4">Coeff (a4):</label>
+                            <input type="text" id="Coeff_a4" name="Coeff_a4" value="0">
+                        </div>
+                        <div class="field-group">
+                            <label for="Coeff_a6">Coeff (a6):</label>
+                            <input type="text" id="Coeff_a6" name="Coeff_a6" value="0">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="point_inputs" style="display:none;">
+                    <p class="coeff-title"><strong>Enter Points (shown for point operations and Choice = 0):</strong></p>
+                    <div class="grid">
+                        <div class="field-group">
+                            <label for="Point1_x">Point 1 (x):</label>
+                            <input type="text" id="Point1_x" name="Point1_x" value="0">
+                        </div>
+                        <div class="field-group">
+                            <label for="Point1_y">Point 1 (y):</label>
+                            <input type="text" id="Point1_y" name="Point1_y" value="0">
+                        </div>
+                        <div id="point2_inputs">
+                            <div class="field-group">
+                                <label for="Point2_x">Point 2 (x):</label>
+                                <input type="text" id="Point2_x" name="Point2_x" value="0">
+                            </div>
+                            <div class="field-group">
+                                <label for="Point2_y">Point 2 (y):</label>
+                                <input type="text" id="Point2_y" name="Point2_y" value="0">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="scalar_input" class="field-group" style="display:none;">
+                    <label for="Scalar">Scalar (for Point Multiplication or Division):</label>
+                    <input type="text" id="Scalar" name="Scalar" value="0">
+                </div>
+
+                <div class="field-group form-actions">
+                    <label for="Action_Type">Action:</label>
+                    <select id="Action_Type" onchange="updateFormAction()" required>
+                        <option value="/calculate" selected>Find Curve Order</option>
+                        <option value="/list_points">List Elliptic Curve Points and Order</option>
+                        <option value="/point_add">Point Addition</option>
+                        <option value="/point_multiply">Point Multiplication</option>
+                        <option value="/point_divide">Point Division by Scalar</option>
+                        <option value="/point_substract">Point Subtraction</option>
+                    </select>
+                </div>
+
+                <button type="submit" id="submit_btn" class="submit-button">Calculate</button>
+                <div id="status_text" class="status-text"></div>
+            </form>
+        </section>
+
+        <section class="result-grid">
+            <section id="result_card" class="form-card" style="display:none;">
+                <h2 class="output-title">Result</h2>
+                <pre id="output_box" class="output-box" style="display:none;"></pre>
+                <pre id="error_box" class="output-box" style="display:none;"></pre>
+            </section>
+
+            <section id="plot_points_card" class="form-card" style="display:none;">
+                <h2 class="output-title">Plotting the Points</h2>
+                <img id="plot_points_image" class="plot-image" alt="Elliptic curve points plot" style="display:none;" />
+                <pre id="plot_points_error_box" class="output-box" style="display:none;"></pre>
+            </section>
+
+            <section id="plot_curve_card" class="form-card" style="display:none;">
+                <h2 class="output-title">Plotting the Curve</h2>
+                <img id="plot_curve_image" class="plot-image" alt="Elliptic curve plot" style="display:none;" />
+                <pre id="plot_curve_error_box" class="output-box" style="display:none;"></pre>
+            </section>
+        </section>
+    </div>
+    <footer class="footer">
+        <div>Jadavpur University, Department of Information Technology</div>
+        <div>Salt Lake Campus , Kolkata</div>
+    </footer>
+    <a href="/credits" class="credits-button">Credits</a>
+</body>
+</html>
